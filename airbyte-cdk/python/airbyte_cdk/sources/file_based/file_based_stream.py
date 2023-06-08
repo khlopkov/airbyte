@@ -9,45 +9,19 @@ from functools import cache, cached_property
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Union
 
 from airbyte_cdk.models import SyncMode
-from airbyte_cdk.sources.file_based.availability_strategy import (
-    FileBasedAvailabilityStrategy,
-)
-from airbyte_cdk.sources.file_based.discovery_concurrency_policy import (
-    AbstractDiscoveryConcurrencyPolicy,
-)
-from airbyte_cdk.sources.file_based.exceptions import (
-    MissingSchemaError,
-    RecordParseError,
-    SchemaInferenceError,
-)
-from airbyte_cdk.sources.file_based.file_based_stream_config import (
-    FileBasedStreamConfig,
-)
-from airbyte_cdk.sources.file_based.file_based_stream_reader import (
-    AbstractFileBasedStreamReader,
-)
-from airbyte_cdk.sources.file_based.file_types import (
-    AvroParser,
-    CsvParser,
-    FileTypeParser,
-    JsonlParser,
-    ParquetParser,
-)
+from airbyte_cdk.sources.file_based.availability_strategy import FileBasedAvailabilityStrategy
+from airbyte_cdk.sources.file_based.discovery_concurrency_policy import AbstractDiscoveryConcurrencyPolicy
+from airbyte_cdk.sources.file_based.exceptions import MissingSchemaError, RecordParseError, SchemaInferenceError
+from airbyte_cdk.sources.file_based.file_based_stream_config import FileBasedStreamConfig
+from airbyte_cdk.sources.file_based.file_based_stream_reader import AbstractFileBasedStreamReader
+from airbyte_cdk.sources.file_based.file_types import AvroParser, CsvParser, FileTypeParser, JsonlParser, ParquetParser
 from airbyte_cdk.sources.file_based.remote_file import FileType, RemoteFile
-from airbyte_cdk.sources.file_based.schema_helpers import (
-    merge_schemas,
-    type_mapping_to_jsonschema,
-)
-from airbyte_cdk.sources.file_based.schema_validation_policies import (
-    record_passes_validation_policy,
-)
+from airbyte_cdk.sources.file_based.schema_helpers import merge_schemas, type_mapping_to_jsonschema
+from airbyte_cdk.sources.file_based.schema_validation_policies import record_passes_validation_policy
 from airbyte_cdk.sources.streams import Stream
 from airbyte_cdk.sources.utils.record_helper import stream_data_to_airbyte_message
 
-
-MAX_N_FILES_FOR_STREAM_SCHEMA_INFERENCE = os.getenv(
-    "MAX_N_FILES_FOR_STREAM_SCHEMA_INFERENCE", 10
-)
+MAX_N_FILES_FOR_STREAM_SCHEMA_INFERENCE = os.getenv("MAX_N_FILES_FOR_STREAM_SCHEMA_INFERENCE", 10)
 
 
 class FileBasedStream(Stream):
@@ -90,23 +64,17 @@ class FileBasedStream(Stream):
         schema = self.catalog_schema
         if schema is None:
             # On read requests we should always have the catalog available
-            raise MissingSchemaError(
-                "Expected `json_schema` in the configured catalog but it is missing."
-            )
+            raise MissingSchemaError("Expected `json_schema` in the configured catalog but it is missing.")
         parser = self._get_parser(self.config.file_type)
         for file in self.list_files_for_this_sync(stream_state):
             try:
                 for record in parser.parse_records(file, self.stream_reader):
-                    if not record_passes_validation_policy(
-                        self.config.validation_policy, record, schema
-                    ):
+                    if not record_passes_validation_policy(self.config.validation_policy, record, schema):
                         logging.warning(f"Record did not pass validation policy: {record}")
                         continue
                     yield stream_data_to_airbyte_message(self.config.name, record)
             except Exception as exc:
-                raise RecordParseError(
-                    f"Error reading records from file: {file.uri}. Is the file valid {self.config.file_type}?"
-                ) from exc
+                raise RecordParseError(f"Error reading records from file: {file.uri}. Is the file valid {self.config.file_type}?") from exc
 
     @cached_property
     def availability_strategy(self):
@@ -130,12 +98,8 @@ class FileBasedStream(Stream):
 
         files = self.list_files()
         if len(files) > MAX_N_FILES_FOR_STREAM_SCHEMA_INFERENCE:
-            files = sorted(files, key=lambda x: x.last_modified, reverse=True)[
-                :MAX_N_FILES_FOR_STREAM_SCHEMA_INFERENCE
-            ]
-            logging.warning(
-                f"Refusing to infer schema for {len(files)} files; using {MAX_N_FILES_FOR_STREAM_SCHEMA_INFERENCE} files."
-            )
+            files = sorted(files, key=lambda x: x.last_modified, reverse=True)[:MAX_N_FILES_FOR_STREAM_SCHEMA_INFERENCE]
+            logging.warning(f"Refusing to infer schema for {len(files)} files; using {MAX_N_FILES_FOR_STREAM_SCHEMA_INFERENCE} files.")
         return self.infer_schema(files)
 
     @cache
@@ -146,9 +110,7 @@ class FileBasedStream(Stream):
         """
         return list(self.stream_reader.list_matching_files(self.config.globs))
 
-    def list_files_for_this_sync(
-        self, stream_state: Mapping[str, Any]
-    ) -> Iterable[RemoteFile]:
+    def list_files_for_this_sync(self, stream_state: Mapping[str, Any]) -> Iterable[RemoteFile]:
         """
         Return the subset of this stream's files that will be read in the current sync.
 
@@ -178,18 +140,12 @@ class FileBasedStream(Stream):
         n_started, n_files = 0, len(files)
         files = iter(files)
         while pending_tasks or n_started < n_files:
-            while len(
-                pending_tasks
-            ) < self.discovery_concurrency_policy.n_concurrent_requests and (
-                file := next(files, None)
-            ):
+            while len(pending_tasks) < self.discovery_concurrency_policy.n_concurrent_requests and (file := next(files, None)):
                 pending_tasks.add(asyncio.create_task(self._infer_file_schema(file)))
                 n_started += 1
             # Return when the first task is completed so that we can enqueue a new task as soon as the
             # number of concurrent tasks drops below the number allowed.
-            done, pending_tasks = await asyncio.wait(
-                pending_tasks, return_when=asyncio.FIRST_COMPLETED
-            )
+            done, pending_tasks = await asyncio.wait(pending_tasks, return_when=asyncio.FIRST_COMPLETED)
             for task in done:
                 base_schema = merge_schemas(base_schema, task.result())
 
@@ -197,13 +153,9 @@ class FileBasedStream(Stream):
 
     async def _infer_file_schema(self, file: RemoteFile) -> Mapping[str, Any]:
         try:
-            return await self._get_parser(self.config.file_type).infer_schema(
-                file, self.stream_reader
-            )
+            return await self._get_parser(self.config.file_type).infer_schema(file, self.stream_reader)
         except Exception as exc:
-            raise SchemaInferenceError(
-                f"Error inferring schema for file: {file.uri}. Is the file valid {self.config.file_type}?"
-            ) from exc
+            raise SchemaInferenceError(f"Error inferring schema for file: {file.uri}. Is the file valid {self.config.file_type}?") from exc
 
     @staticmethod
     def _get_parser(file_type: FileType) -> FileTypeParser:
