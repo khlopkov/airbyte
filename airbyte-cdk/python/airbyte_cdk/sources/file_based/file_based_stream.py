@@ -74,7 +74,9 @@ class FileBasedStream(Stream):
                         continue
                     yield stream_data_to_airbyte_message(self.config.name, record)
             except Exception as exc:
-                raise RecordParseError(f"Error reading records from file: {file.uri}. Is the file valid {FileType(self.config.file_type.value)}?") from exc
+                raise RecordParseError(
+                    f"Error reading records from file: {file.uri}. Is the file valid {FileType(self.config.file_type.value)}?"
+                ) from exc
 
     @cached_property
     def availability_strategy(self):
@@ -155,7 +157,9 @@ class FileBasedStream(Stream):
         try:
             return await self._get_parser(self.config.file_type).infer_schema(file, self.stream_reader)
         except Exception as exc:
-            raise SchemaInferenceError(f"Error inferring schema for file: {file.uri}. Is the file valid {self.config.file_type.value}?") from exc
+            raise SchemaInferenceError(
+                f"Error inferring schema for file: {file.uri}. Is the file valid {self.config.file_type.value}?"
+            ) from exc
 
     @staticmethod
     def _get_parser(file_type: FileType) -> FileTypeParser:
