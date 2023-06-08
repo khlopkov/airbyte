@@ -10,6 +10,7 @@ from unittest import mock
 import pytest
 from airbyte_cdk.entrypoint import launch
 from unit_tests.sources.file_based.scenarios.csv_scenarios import (
+    InvalidCsvTestScenario,
     MultiCsvNFilesExceedsLimitForSchemaInferenceTestScenario,
     MultiCsvTestScenario,
     SingleCsvTestScenario,
@@ -18,21 +19,30 @@ from unit_tests.sources.file_based.scenarios.csv_scenarios import (
 scenarios = [
     SingleCsvTestScenario(),
     MultiCsvTestScenario(),
+    InvalidCsvTestScenario(),
 ]
 
 
 @pytest.mark.parametrize("scenario", scenarios)
 def test_discover(capsys, tmp_path, json_spec, scenario):
-    assert discover(capsys, tmp_path, scenario) == scenario.expected_catalog
+    if scenario.expected_discover_error:
+        with pytest.raises(scenario.expected_discover_error):
+            discover(capsys, tmp_path, scenario)
+    else:
+        assert discover(capsys, tmp_path, scenario) == scenario.expected_catalog
 
 
 @pytest.mark.parametrize("scenario", scenarios)
 def test_read(capsys, tmp_path, json_spec, scenario):
-    records = read(capsys, tmp_path, scenario)
-    expected_records = scenario.expected_records
-    assert len(records) == len(expected_records)
-    for actual, expected in zip(records, expected_records):
-        assert actual["record"]["data"] == expected
+    if scenario.expected_read_error:
+        with pytest.raises(scenario.expected_read_error):
+            read(capsys, tmp_path, scenario)
+    else:
+        output = read(capsys, tmp_path, scenario)
+        expected_output = scenario.expected_records
+        assert len(output) == len(expected_output)
+        for actual, expected in zip(output, expected_output):
+            assert actual["record"]["data"] == expected
 
 
 def test_discover_with_n_files_exceeding_limit(capsys, tmp_path, json_spec):

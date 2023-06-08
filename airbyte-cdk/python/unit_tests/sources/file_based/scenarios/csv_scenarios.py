@@ -2,6 +2,7 @@
 # Copyright (c) 2023 Airbyte, Inc., all rights reserved.
 #
 
+from airbyte_cdk.sources.file_based.exceptions import RecordParseError, SchemaInferenceError
 from unit_tests.sources.file_based.scenarios._base_scenario import BaseTestScenario
 
 
@@ -101,3 +102,19 @@ class MultiCsvNFilesExceedsLimitForSchemaInferenceTestScenario(MultiCsvTestScena
             }
         ]
     }
+
+
+class InvalidCsvTestScenario(SingleCsvTestScenario):
+    name = "invalid_csv_stream"
+    files = {
+        "a.csv": {
+            "contents": [
+                (),
+                ("val11", "val12"),
+                ("val21", "val22"),
+            ],
+            "last_modified": "2023-06-05T03:54:07.000Z",
+        }
+    }
+    expected_discover_error = SchemaInferenceError
+    expected_read_error = RecordParseError

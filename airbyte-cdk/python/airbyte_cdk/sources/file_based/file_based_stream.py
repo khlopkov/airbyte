@@ -17,6 +17,7 @@ from airbyte_cdk.sources.file_based.discovery_concurrency_policy import (
 )
 from airbyte_cdk.sources.file_based.exceptions import (
     MissingSchemaError,
+    RecordParseError,
     SchemaInferenceError,
 )
 from airbyte_cdk.sources.file_based.file_based_stream_config import (
@@ -41,6 +42,8 @@ from airbyte_cdk.sources.file_based.schema_validation_policies import (
     record_passes_validation_policy,
 )
 from airbyte_cdk.sources.streams import Stream
+from airbyte_cdk.sources.utils.record_helper import stream_data_to_airbyte_message
+
 
 MAX_N_FILES_FOR_STREAM_SCHEMA_INFERENCE = os.getenv(
     "MAX_N_FILES_FOR_STREAM_SCHEMA_INFERENCE", 10
@@ -92,13 +95,18 @@ class FileBasedStream(Stream):
             )
         parser = self._get_parser(self.config.file_type)
         for file in self.list_files_for_this_sync(stream_state):
-            for record in parser.parse_records(file, self.stream_reader):
-                if not record_passes_validation_policy(
-                    self.config.validation_policy, record, schema
-                ):
-                    logging.warning(f"Record did not pass validation policy: {record}")
-                    continue
-                yield record
+            try:
+                for record in parser.parse_records(file, self.stream_reader):
+                    if not record_passes_validation_policy(
+                        self.config.validation_policy, record, schema
+                    ):
+                        logging.warning(f"Record did not pass validation policy: {record}")
+                        continue
+                    yield stream_data_to_airbyte_message(self.config.name, record)
+            except Exception as exc:
+                raise RecordParseError(
+                    f"Error reading records from file: {file.uri}. Is the file valid {self.config.file_type}?"
+                ) from exc
 
     @cached_property
     def availability_strategy(self):
@@ -194,7 +202,7 @@ class FileBasedStream(Stream):
             )
         except Exception as exc:
             raise SchemaInferenceError(
-                f"Error inferring schema for file: {file.uri}"
+                f"Error inferring schema for file: {file.uri}. Is the file valid {self.config.file_type}?"
             ) from exc
 
     @staticmethod

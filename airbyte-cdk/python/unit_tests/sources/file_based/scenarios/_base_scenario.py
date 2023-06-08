@@ -2,7 +2,7 @@
 # Copyright (c) 2023 Airbyte, Inc., all rights reserved.
 #
 
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, List, Mapping, Optional
 
 from unit_tests.sources.file_based.in_memory_files_source import InMemoryFilesSource
 
@@ -12,7 +12,9 @@ class BaseTestScenario:
     config: Mapping[str, Any]
     files: Dict[str, Any]
     expected_catalog: Dict[str, Any]
-    expected_records: Dict[str, Any]
+    expected_records: List[Dict[str, Any]]
+    expected_discover_error: Optional[Exception] = None
+    expected_read_error: Optional[Exception] = None
 
     def __init__(self):
         self.source = InMemoryFilesSource(self.files)
